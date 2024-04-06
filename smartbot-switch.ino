@@ -4,34 +4,27 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <Arduino_JSON.h>
+#include "./config.h"
 
 #define SERVO 12
 #define MIN_MICROS 500  //544 
 #define MAX_MICROS 2450
 
 // wifi config
-char ssid[30] = "Isling iPhone";
-char password[30] = "tumotden8";
+char ssid[30] = WIFI_SSID;
+char password[30] = WIFI_PASS;
 
 // device config
-// 01HTQ9844VMWWP70AD8HGJ48BY Switch Long
-// 01HTQHX3KXA94E0C4G9MH9D060 Switch
-// 01HTQHXAZNSDCGV000FYAH4M3G Switch
-// 01HTQHXG81N1KW2N01GCRXT2Q5 Switch
-// 01HTRKPKMGMGK7QRNC1RDAY8DV Button Long
-// 01HTRKQ0MATTY0CFYQ3MC9HQC7 Button
-// 01HTRKQ8Q9GJ063B08TGACQZK0 Button
-// 01HTRKQJ2N3V2E3THC14QSQ3T8 Button
-const char *deviceId = "01HTQ9844VMWWP70AD8HGJ48BY";
-char spaceId[30] = "01HTQ9HBANAVTXG95AQWSWGXKK";
+const char *deviceId = DEVICE_ID;
+char spaceId[30] = SPACE_ID;
 const char *STATE_ON = "on";
 const char *STATE_OFF = "off";
 
 // MQTT server config
-const char *mqttBroker = "mqtt.dev.isling.me";  // EMQX broker endpoint
+const char *mqttBroker = MQTT_HOST;  // EMQX broker endpoint
 const char *mqttUsername = deviceId;  // MQTT username for authentication
-const char *mqttPassword = "";  // MQTT password for authentication
-const int mqttPort = 1883;  // MQTT port (TCP)
+const char *mqttPassword = MQTT_PASS;  // MQTT password for authentication
+const int mqttPort = MQTT_PORT;  // MQTT port (TCP)
 char *cmdTopic;     // MQTT topic
 const char *pingTopic = "ping/iot_devices";
 
