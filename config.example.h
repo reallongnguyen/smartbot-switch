@@ -13,6 +13,7 @@
 // 01HTRKQJ2N3V2E3THC14QSQ3T8 Button Chan
 // 01HTRWSH9K3GWY1KWDJ2Y3YT0D Button Diep
 #define DEVICE_ID "one of above"
+#define DEVICE_TYPE "switch"
 #define WIFI_SSID "wifi name"
 #define WIFI_PASS "wifi pass"
 #define SPACE_ID "01HTQ9HBANAVTXG95AQWSWGXKK"

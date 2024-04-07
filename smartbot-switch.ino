@@ -1,32 +1,36 @@
-#include "string.h"
+#include <string.h>
 #include <ESP8266_ISR_Servo.h>
 #include <ESP8266_ISR_Servo.hpp>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <Arduino_JSON.h>
-#include "./config.h"
+#include <CronAlarms.h>
+#include "config.h"
+#include "Util.h"
 
 #define SERVO 12
 #define MIN_MICROS 500  //544 
 #define MAX_MICROS 2450
+
+Util util;
 
 // wifi config
 char ssid[30] = WIFI_SSID;
 char password[30] = WIFI_PASS;
 
 // device config
-const char *deviceId = DEVICE_ID;
 char spaceId[30] = SPACE_ID;
 const char *STATE_ON = "on";
 const char *STATE_OFF = "off";
 
 // MQTT server config
 const char *mqttBroker = MQTT_HOST;  // EMQX broker endpoint
-const char *mqttUsername = deviceId;  // MQTT username for authentication
+const char *mqttUsername = DEVICE_ID;  // MQTT username for authentication
 const char *mqttPassword = MQTT_PASS;  // MQTT password for authentication
 const int mqttPort = MQTT_PORT;  // MQTT port (TCP)
-char *cmdTopic;     // MQTT topic
-const char *pingTopic = "ping/iot_devices";
+String cmdTopic;
+const char *pingTopic = "system/ping/iot_device";
+String statusTopic;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -37,6 +41,18 @@ void mqttCallback(char *topic, byte *payload, unsigned int length);
 
 int servoIndex = -1;
 int range = 45;
+
+void publishUpdateStatus(const char *state) {
+  JSONVar statusMsg;
+  statusMsg["iotDeviceId"] = DEVICE_ID;
+  statusMsg["iotDeviceType"] = DEVICE_TYPE;
+  statusMsg["state"] = state;
+
+  String payload = JSON.stringify(statusMsg);
+
+  mqttClient.publish(statusTopic.c_str(), payload.c_str());
+  Serial.printf("publish update status msg: %s\n", payload.c_str());
+}
 
 void initSwitch() {
   servoIndex = ISR_Servo.setupServo(SERVO, MIN_MICROS, MAX_MICROS);
@@ -51,18 +67,28 @@ void setSwitchState(const char *state) {
 
   int position = 0;
 
-  if (strcmp(state, "on") == 0) {
+  if (strcmp(state, STATE_ON) == 0) {
     position = 90 - range;
-  } else if (strcmp(state, "off") == 0) {
+  } else if (strcmp(state, STATE_OFF) == 0) {
     position = 90 + range;
   } else {
     return;
   }
 
   ISR_Servo.setPosition(servoIndex, position);
-  delay(400);
+  delay(200);
+  publishUpdateStatus(state);
+  delay(200);
   ISR_Servo.setPosition(servoIndex, 90);
   delay(400);
+}
+
+void turnOnSwitch() {
+  setSwitchState(STATE_ON);
+}
+
+void updateTime() {
+  util.updateTime();
 }
 
 void setup() {
@@ -72,14 +98,20 @@ void setup() {
   initSwitch();
 
   // MQTT
-  String cmdTopicS = String(spaceId) + "/commands/" + String(deviceId);
-  cmdTopic = (char *)malloc(cmdTopicS.length() + 1);
-  strcpy(cmdTopic, cmdTopicS.c_str());
+  cmdTopic = String(spaceId) + "/command/" + String(DEVICE_ID);
+  statusTopic = String(spaceId) + "/device_status";
 
   connectToWiFi();
   mqttClient.setServer(mqttBroker, mqttPort);
   mqttClient.setCallback(mqttCallback);
   connectToMQTTBroker();
+
+  // sync time
+  util.configTimeWithTZ("JST-9");
+
+  // schedule
+  Cron.create("0 */1 3 * * *", turnOnSwitch, false);
+  Cron.create("0 0 */1 * * *", updateTime, false);
 }
 
 void loop() {
@@ -92,6 +124,8 @@ void loop() {
   }
 
   mqttClient.loop();
+
+  Cron.delay();
 }
 
 void connectToWiFi() {
@@ -106,14 +140,14 @@ void connectToWiFi() {
 
 void connectToMQTTBroker() {
   while (!mqttClient.connected()) {
-      String clientId = "switch-client-" + String(deviceId) + "-" + String(WiFi.macAddress());
+      String clientId = "switch-client-" + String(DEVICE_ID) + "-" + String(WiFi.macAddress());
       Serial.printf("Connecting to MQTT Broker as %s.....\n", clientId.c_str());
       if (mqttClient.connect(clientId.c_str(), mqttUsername, mqttPassword)) {
           Serial.println("Connected to MQTT broker");
-          mqttClient.subscribe(cmdTopic);
-          Serial.printf("Subscribe topic %s\n", cmdTopic);
+          mqttClient.subscribe(cmdTopic.c_str());
+          Serial.printf("Subscribe topic %s\n", cmdTopic.c_str());
           // Publish message upon successful connection
-          mqttClient.publish(pingTopic, deviceId);
+          mqttClient.publish(pingTopic, DEVICE_ID);
       } else {
           Serial.print("Failed to connect to MQTT broker, rc=");
           Serial.print(mqttClient.state());
@@ -123,12 +157,44 @@ void connectToMQTTBroker() {
   }
 }
 
+void ack(String _spaceId, String requesterId, String requestId, String requestType, String status, String message, String newState) {
+  String ackTopic = String(_spaceId) + "/ack/" + requesterId;
+
+  JSONVar ackMsg;
+  ackMsg["requestId"] = String(requestId);
+  ackMsg["requestType"] = String(requestType);
+  ackMsg["iotDeviceId"] = DEVICE_ID;
+  ackMsg["iotDeviceType"] = DEVICE_TYPE;
+  ackMsg["status"] = status;
+  ackMsg["message"] = String(message);
+  ackMsg["newState"] = String(newState);
+
+  String payload = JSON.stringify(ackMsg);
+
+  mqttClient.publish(ackTopic.c_str(), payload.c_str());
+  Serial.printf("publish ack msg: %s\n", payload.c_str());
+}
+
+void handleCommand(JSONVar msg) {
+  if (
+    JSON.typeof(msg) == "undefined"
+    || !msg.hasOwnProperty("command")
+    || (strcmp(msg["command"], STATE_ON) != 0 && strcmp(msg["command"], STATE_OFF) != 0)
+  ) {
+    return;
+  }
+
+  ack(spaceId, msg["requesterId"], msg["id"], "command", "done", "", msg["command"]);
+
+  setSwitchState(msg["command"]);
+}
+
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
   Serial.print("Message received on topic: ");
   Serial.println(topic);
   Serial.print("Message:");
 
-  char *payloadStr = (char*)malloc(length + 1);
+  char payloadStr[length + 1];
 
   for (unsigned int i = 0; i < length; i++) {
       payloadStr[i] = payload[i];
@@ -139,42 +205,9 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   Serial.println(payloadStr);
   Serial.println("-----------------------");
 
-  if (strcmp(topic, cmdTopic) != 0) {
-    return;
-  }
-
   JSONVar msg = JSON.parse(payloadStr);
 
-  if (JSON.typeof(msg) == "undefined" || !msg.hasOwnProperty("command")) {
-    return;
+  if (strcmp(topic, cmdTopic.c_str()) == 0) {
+    handleCommand(msg);
   }
-
-  if (strcmp(msg["command"], STATE_ON) != 0 && strcmp(msg["command"], STATE_OFF) != 0) {
-    return;
-  }
-
-  String ackTopic = String(spaceId) + "/ack_commands/" + String(msg["requesterId"]);
-  Serial.printf("ackTopic %s\n", ackTopic.c_str());
-
-  char commandId[strlen(msg["id"]) + 1];
-  char newState[strlen(msg["command"]) + 1];
-
-  strcpy(commandId, msg["id"]);
-  strcpy(newState, msg["command"]);
-
-  JSONVar ackMsg;
-  ackMsg["commandId"] = commandId;
-  ackMsg["iotDeviceId"] = deviceId;
-  ackMsg["iotDeviceType"] = "switch";
-  ackMsg["status"] = "done";
-  ackMsg["newState"] = newState;
-
-  String mqttMsg = JSON.stringify(ackMsg);
-
-  mqttClient.publish(ackTopic.c_str(), mqttMsg.c_str());
-  Serial.printf("publish ack msg: %s\n", mqttMsg.c_str());
-
-  setSwitchState(newState);
-
-  free(payloadStr);
 }
