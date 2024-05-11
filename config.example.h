@@ -1,19 +1,13 @@
-#define MQTT_HOST "host"
+#define MQTT_HOST "{MQTT host}"
 #define MQTT_PORT 1883
 #define MQTT_PASS ""
+#define DEVICE_ID "{Gen ULID}"
+#define DEVICE_TYPE "{e.g. bot_switch}"
+#define AP_WIFI_SSID "smartbot-bs-{first 8 chars on DEVICE ID}"
+#define AP_WIFI_PASS "12345678"
+#define MQTT_CLIENT_ID "bot_switch-{DEVICE_ID}"
+#define SCHEDULE_UPDATE_TIME "0 0 */1 * * *"
 
-// 01HTQ9844VMWWP70AD8HGJ48BY Switch Long
-// 01HTQHX3KXA94E0C4G9MH9D060 Switch Hai
-// 01HTQHXAZNSDCGV000FYAH4M3G Switch Cuong
-// 01HTQHXG81N1KW2N01GCRXT2Q5 Switch Chan
-// 01HTRWS1XEV8HPZY6HS1VS6TRN Switch Diep
-// 01HTRKPKMGMGK7QRNC1RDAY8DV Button Long
-// 01HTRKQ0MATTY0CFYQ3MC9HQC7 Button Hai
-// 01HTRKQ8Q9GJ063B08TGACQZK0 Button Cuong
-// 01HTRKQJ2N3V2E3THC14QSQ3T8 Button Chan
-// 01HTRWSH9K3GWY1KWDJ2Y3YT0D Button Diep
-#define DEVICE_ID "one of above"
-#define DEVICE_TYPE "switch"
-#define WIFI_SSID "wifi name"
-#define WIFI_PASS "wifi pass"
-#define SPACE_ID "01HTQ9HBANAVTXG95AQWSWGXKK"
+#define WIFI_SSID ""
+#define WIFI_PASS ""
+#define SPACE_ID ""
