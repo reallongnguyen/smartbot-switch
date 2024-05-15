@@ -41,6 +41,7 @@ String cmdTopic;
 String statusTopic;
 String scheduleTopic;
 const char *syncSettingTopic = "system/sync_setting/iot_device";
+const char *registerTopic = "system/iot_device/register";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -333,6 +334,25 @@ void setupHomeWiFi() {
   }
 }
 
+int isNotRegister = 1;
+
+void registerDevice() {
+  JSONVar msg;
+  msg["iotDeviceId"] = DEVICE_ID;
+  msg["iotDeviceType"] = DEVICE_TYPE;
+  msg["version"] = DEVICE_VERSION;
+  msg["firmwareVersion"] = DEVICE_FIRMWARE_VERSION;
+  msg["chipId"] = "0";
+  msg["macAddress"] = "0";
+  msg["state"] = "running";
+  msg["connectStatus"] = "online";
+  msg["spaceId"] = spaceId;
+
+  String payload = JSON.stringify(msg);
+
+  mqttClient.publish(registerTopic, payload.c_str());
+}
+
 void setupAfterConnectWiFi() {
     // sync time
     util.configTimeWithTZ("JST-9");
@@ -346,6 +366,12 @@ void setupAfterConnectWiFi() {
     mqttClient.setCallback(mqttCallback);
     mqttClient.setBufferSize(1024);
     connectToMQTTBroker();
+
+    if (isNotRegister) {
+      registerDevice();
+      isNotRegister = 0;
+      Serial.println("registered device successfully");
+    }
 
     mqttClient.publish(syncSettingTopic, DEVICE_ID);
 
